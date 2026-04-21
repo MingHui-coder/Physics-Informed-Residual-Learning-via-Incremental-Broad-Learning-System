@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ':*)",
+      "Read(//c/Users/LENOVO/Desktop/吴博士论文/**)",
+      "Bash(python generate_angle_dataset.py --help)",
+      "Bash(python -m py_compile generate_angle_dataset.py)"
+    ]
+  }
+}
