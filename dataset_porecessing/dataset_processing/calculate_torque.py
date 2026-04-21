@@ -1,3 +1,12 @@
+"""
+@File    :   calculate_torque.py
+@Time    :   2026/04/21
+@Author  :   Minghui Zhang
+@Version :   1.0
+@Contact :   [你的邮箱]
+@Desc    :   得到最终的数据集。计算 惯性力矩 + 重力力矩 
+                 以及 真实力矩-(惯性力矩 + 重力力矩)
+"""
 import pandas as pd
 import numpy as np
 from pathlib import Path

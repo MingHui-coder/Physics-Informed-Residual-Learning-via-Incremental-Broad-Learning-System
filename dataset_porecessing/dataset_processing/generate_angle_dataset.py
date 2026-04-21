@@ -1,3 +1,12 @@
+"""
+@File    :   generate_angle_dataset.py
+@Time    :   2026/04/21
+@Author  :   Minghui Zhang
+@Version :   1.0
+@Contact :   [你的邮箱]
+@Desc    :   得到中间状态数据集。计算 垂直于地面为背景的小腿角度 与 小腿角度的二阶导数 
+"""
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
