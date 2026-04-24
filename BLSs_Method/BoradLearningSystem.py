@@ -1,4 +1,12 @@
-import numpy as npinv
+"""
+@File    :   BroadLearningSystem.py
+@Time    :   2026/04/22
+@Author  :   Minghui Zhang
+@Version :   1.0
+@Contact :   [你的邮箱]
+@Desc    :   负责BLS的回归、分类。包含模型的初始化、训练、预测。
+"""
+import numpy as np
 import pandas as pd
 
 from scipy import linalg as LA
@@ -6,6 +14,7 @@ from scipy import io as scio
 from numpy import random
 from sklearn import preprocessing
 
+#网格搜索，搜索得到最佳参数
 class GridSearchCV:
     def __init__(self) -> None:
         pass
