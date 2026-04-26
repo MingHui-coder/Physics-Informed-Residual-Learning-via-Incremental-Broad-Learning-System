@@ -1,7 +1,7 @@
 """
 BLS_model_training.py
 
-描述:   终端交互选择训练集张量 (.pt)，使用 BLSRegressor 进行训练，
+描述:   终端交互选择训练集张量 (.pt)，使用 BLSRegressor 训练，
        并将训练好的模型保存至 Model_Training_Testing/models/。
 作者:   Minghui Zhang
 创建:   2026-04
