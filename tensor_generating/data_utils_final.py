@@ -180,7 +180,7 @@ def generate_training_tensor(dataset_name, action,
 
     print(f"[*] 张量维度: X shape: {X_train.shape}, y shape: {y_train.shape}")
 
-    out_path = Path("data_processor/tensors/train")
+    out_path = Path("tensor_generating/tensors/train")
     out_path.mkdir(parents=True, exist_ok=True)
     label = TARGET_LABEL_MAP.get(target_column, target_column)
     save_filename = out_path / f"Train_{dataset_name}__{action}__{label}.pt"
@@ -243,7 +243,7 @@ def build_test_dataset_interactive(root_dir, target_subject,
 def generate_test_tensor(dataset_name, action,
                          target_column="knee_moment", seq_len=20,
                          base_dir="dataset_porecessing/final_dataset",
-                         output_dir="data_processor/tensors/test"):
+                         output_dir="tensor_generating/tensors/test"):
     """
     测试集路由器：定位留出受试者，调用交互选择，并保存测试集张量。
     """

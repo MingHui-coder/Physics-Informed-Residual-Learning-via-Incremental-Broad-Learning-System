@@ -319,7 +319,7 @@ def main():
             print("[!] 请输入 y 或 n。")
 
     # ========================================
-    # 5. 计算指标（逐条输出）
+    # 5. 计算指标（逐条输出）& 保存 CSV
     # ========================================
     print(f"\n{'=' * 50}")
     print("[*] 评估结果：")
@@ -328,6 +328,19 @@ def main():
         r2 = compute_r2(y_true, data)
         print(f"    {label:30s}  RMSE = {rmse:.6f}   R² = {r2:.6f}")
     print(f"{'=' * 50}")
+
+    # 保存 CSV
+    out_dir = Path("final_moment_prediction/result_filtered")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = out_dir / f"filtered_{selected.stem}.csv"
+    csv_headers = ["Truth"] + [f"Predicted_{label}" for _, label in preds]
+    with open(csv_path, "w", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(csv_headers)
+        for i in range(len(y_true)):
+            row = [y_true[i]] + [preds[j][0][i] for j in range(len(preds))]
+            writer.writerow(row)
+    print(f"[*] CSV 已保存至: {csv_path}")
 
     # ========================================
     # 6. 可选画图
@@ -355,6 +368,9 @@ def main():
                 plt.title('Prediction Comparison')
                 plt.legend(fontsize=8)
                 plt.grid(True, alpha=0.3)
+                plot_path = out_dir / f"filtered_{selected.stem}.png"
+                plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+                print(f"[*] 图片已保存至: {plot_path}")
                 plt.show()
             except ImportError:
                 print("[!] matplotlib 未安装，无法绘图。")
