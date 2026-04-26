@@ -8,8 +8,12 @@ BLS_model_training.py
 """
 
 import sys
+import os
 import pickle
 from pathlib import Path
+
+# 减少 CUDA 显存碎片（必须在 import torch 之前设置）
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 import numpy as np
 import torch
@@ -61,12 +65,15 @@ def main():
     print(f"\n[*] 你选择了: {selected_file.name}")
 
     # ========================================
-    # 2. 加载数据
+    # 2. 加载数据 (GPU 加速)
     # ========================================
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"[*] 使用设备: {device}")
+
     print("[*] 正在加载训练数据...")
-    data = torch.load(selected_file)
-    X_data = data["X_data"].numpy()   # shape: (n, seq_len, n_features)
-    y_data = data["y_label"].numpy()  # shape: (n, 1)
+    data = torch.load(selected_file, map_location=device)
+    X_data = data["X_data"]   # shape: (n, seq_len, n_features) — tensor
+    y_data = data["y_label"]  # shape: (n, 1) — tensor
 
     print(f"[*] 原始数据形状 — X: {X_data.shape}, y: {y_data.shape}")
 
@@ -76,24 +83,29 @@ def main():
     print(f"[*] 展平后 X 形状: {X_flat.shape}")
 
     # ========================================
-    # 3. 训练 BLS 模型
+    # 3. 训练 BLS 模型 (GPU 加速)
     # ========================================
-    print("[*] 正在初始化 BLSRegressor...")
+    print(f"[*] 正在初始化 BLSRegressor (device={device})...")
     model = BLSRegressor(
         NumFeatureNodes=10,
-        NumWindows=100,
-        NumEnhance=1000,
+        NumWindows=10,
+        NumEnhance=100,
         S=0.5,
         C=2 ** -30,
+        device=device,
     )
 
-    print("[*] 开始训练 (可能需要较长时间)...")
+    print("[*] 开始训练 (GPU 加速)...")
     model.fit(X_flat, y_data)
     print("[*] 训练完成！")
 
     # ========================================
-    # 4. 保存模型
+    # 4. 保存模型（先移回 CPU 再 pickle）
     # ========================================
+    if torch.device(device).type == 'cuda':
+        model.cpu()
+        print("[*] 模型已移至 CPU，准备保存...")
+
     model_dir = Path("Model_Training_Testing/models")
     model_dir.mkdir(parents=True, exist_ok=True)
 
