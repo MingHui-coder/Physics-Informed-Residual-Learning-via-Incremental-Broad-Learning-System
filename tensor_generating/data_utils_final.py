@@ -140,7 +140,8 @@ def build_dataset_from_directory(root_dir, target_column="knee_moment",
 
 def generate_training_tensor(dataset_name, action,
                              target_column="knee_moment", seq_len=20,
-                             base_dir="dataset_porecessing/final_dataset"):
+                             base_dir="dataset_porecessing/final_dataset",
+                             dataset_type="unfiltered"):
     """
     根据数据集和动作，自动路由对应的路径和排除规则，并固化保存张量。
 
@@ -151,6 +152,7 @@ def generate_training_tensor(dataset_name, action,
                              "knee_moment" 或 "knee_moment_minus_T_physics"
         seq_len (int): 时间窗口长度
         base_dir (str): 数据集根目录路径
+        dataset_type (str): "filtered" 或 "unfiltered"
     """
     if dataset_name == "datasetA":
         exclude_subject = "AB25"
@@ -183,7 +185,13 @@ def generate_training_tensor(dataset_name, action,
     out_path = Path("tensor_generating/tensors/train")
     out_path.mkdir(parents=True, exist_ok=True)
     label = TARGET_LABEL_MAP.get(target_column, target_column)
-    save_filename = out_path / f"Train_{dataset_name}__{action}__{label}.pt"
+
+    # filtered数据集在文件名最前加 "filtered_"
+    if dataset_type == "filtered":
+        save_filename = out_path / f"Train_filtered_{dataset_name}__{action}__{label}.pt"
+    else:
+        save_filename = out_path / f"Train_{dataset_name}__{action}__{label}.pt"
+
     torch.save({"X_data": X_train, "y_label": y_train}, save_filename)
 
     print(f"[*] 恭喜！专属数据包已保存至: {save_filename}\n")
@@ -243,7 +251,8 @@ def build_test_dataset_interactive(root_dir, target_subject,
 def generate_test_tensor(dataset_name, action,
                          target_column="knee_moment", seq_len=20,
                          base_dir="dataset_porecessing/final_dataset",
-                         output_dir="tensor_generating/tensors/test"):
+                         output_dir="tensor_generating/tensors/test",
+                         dataset_type="unfiltered"):
     """
     测试集路由器：定位留出受试者，调用交互选择，并保存测试集张量。
     """
@@ -276,7 +285,11 @@ def generate_test_tensor(dataset_name, action,
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
     label = TARGET_LABEL_MAP.get(target_column, target_column)
-    save_filepath = out_path / f"Test_{dataset_name}__{action}__{label}__{selected_csv_name}.pt"
+    # filtered数据集在文件名最前加 "filtered_"
+    if dataset_type == "filtered":
+        save_filepath = out_path / f"Test_filtered_{dataset_name}__{action}__{label}__{selected_csv_name}.pt"
+    else:
+        save_filepath = out_path / f"Test_{dataset_name}__{action}__{label}__{selected_csv_name}.pt"
 
     torch.save({"X_data": X_test, "y_label": y_test}, save_filepath)
     print(f"[*] 恭喜！测试集数据包已安全保存至: {save_filepath}\n")

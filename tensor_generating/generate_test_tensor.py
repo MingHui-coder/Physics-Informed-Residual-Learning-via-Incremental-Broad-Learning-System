@@ -9,11 +9,35 @@ generate_test_final.py
 
 from data_utils_final import generate_test_tensor, select_target_column_interactive, select_action_interactive
 
+
+def select_dataset_type():
+    """交互选择数据集类型：filter还是unfilter"""
+    print("\n" + "="*50)
+    print("[*] 请选择数据集类型：")
+    print("    1 - 未滤波 (使用 dataset_porecessing/final_dataset)")
+    print("    2 - 滤波后 (使用 dataset_porecessing/filter_final_dataset)")
+    print("="*50)
+    while True:
+        try:
+            choice = input("\n[*] 请输入编号 (1/2): ").strip()
+            if choice == "1":
+                return "unfiltered", "dataset_porecessing/final_dataset"
+            elif choice == "2":
+                return "filtered", "dataset_porecessing/filter_final_dataset"
+            else:
+                print("[!] 输入无效，请输入 1 或 2。")
+        except Exception:
+            print("[!] 输入无效，请重新输入。")
+
+
 if __name__ == "__main__":
     # ========================================
     # 业务参数配置
     # ========================================
     TARGET_DATASET = "datasetA"          # 可选: "datasetA" 或 "datasetB"
+
+    # 终端交互选择数据集类型
+    DATASET_TYPE, BASE_DIR = select_dataset_type()
 
     # 终端交互选择动作和目标列
     TARGET_ACTION = select_action_interactive()
@@ -25,5 +49,6 @@ if __name__ == "__main__":
         action=TARGET_ACTION,
         target_column=TARGET_COLUMN,
         seq_len=20,
-        base_dir="dataset_porecessing/final_dataset"
+        base_dir=BASE_DIR,
+        dataset_type=DATASET_TYPE
     )
