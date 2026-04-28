@@ -55,21 +55,28 @@ TEST_SUBJECT_MAP = {
 
 
 def parse_test_result_stem(test_csv_stem):
-    """从 test_result 文件名解析 dataset / action / trial_token。"""
+    """从 test_result 文件名解析 dataset / action / trial_token，以及是否filtered。"""
     stem = test_csv_stem
     if stem.startswith("result_"):
         stem = stem[7:]
+
+    # 检测是否filtered
+    is_filtered = "filtered" in stem.lower()
 
     test_part = stem.split("__Train_")[0]
     tokens = test_part.split("__")
 
     if len(tokens) < 3:
-        return None, None, None
+        return None, None, None, is_filtered
 
+    # dataset可能是 "filtered_datasetA" 或 "datasetA"，需要去掉 "filtered_" 前缀
     dataset = tokens[0].replace("Test_", "", 1)
+    if dataset.startswith("filtered_"):
+        dataset = dataset.replace("filtered_", "")
+
     action = tokens[1]
     trial_token = tokens[-1]
-    return dataset, action, trial_token
+    return dataset, action, trial_token, is_filtered
 
 
 def find_csv_by_trial(search_base, trial_token):
@@ -133,13 +140,13 @@ def main():
     # ========================================
     # 2. 自动匹配 CSV 并提取 T_physics（滑动窗口对齐）
     # ========================================
-    dataset, action, trial_token = parse_test_result_stem(selected.stem)
+    dataset, action, trial_token, is_filtered = parse_test_result_stem(selected.stem)
     if dataset is None:
         print("[!] 无法解析 test_result 文件名。")
         return
 
     test_subject = TEST_SUBJECT_MAP.get(dataset)
-    print(f"[*] 解析结果: dataset={dataset}, action={action}, trial={trial_token}")
+    print(f"[*] 解析结果: dataset={dataset}, action={action}, trial={trial_token}, filtered={is_filtered}")
     print(f"[*] 测试受试者: {test_subject}")
 
     # 读取 test_result 的 Truth / Predicted
@@ -154,12 +161,19 @@ def main():
     truth_vals = np.array([float(test_rows[i][truth_idx]) for i in range(n_test)])
     pred_vals = np.array([float(test_rows[i][pred_idx]) for i in range(n_test)])
 
-    # 自动查找 T_physics 来源 CSV（优先 final_dataset_test，再试 final_dataset 下测试受试者）
+    # 根据是否filtered决定搜索路径
+    if is_filtered:
+        base_dir = Path("dataset_porecessing/filter_final_dataset")
+    else:
+        base_dir = Path("dataset_porecessing/final_dataset")
+
+    # 自动查找 T_physics 来源 CSV
     t_physics = None
 
     search_candidates = [
         ("final_dataset_test", Path("dataset_porecessing/final_dataset_test") / dataset / action),
-        (f"final_dataset/{test_subject}", Path("dataset_porecessing/final_dataset") / dataset / action / test_subject),
+        (f"{base_dir.name}/{test_subject}", base_dir / dataset / action / test_subject),
+        (base_dir.name, base_dir / dataset / action),
     ]
 
     for label, search_base in search_candidates:
