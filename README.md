@@ -276,31 +276,31 @@ $$
 则结合公式(24)(25),公式(26)可化简为：
 
 $$
-W^* = P^* \left( \tilde{A}^T Y + A_a^T Y_a + B_{\text{phy}} \right)
+W^* = P^* \left( \tilde{A}^T Y + \tilde{A_a}^T Y_a + B_{\text{phy}} \right)
 $$
 
 由公式(22),公式(28)可化简为：
 
 $$
-W^* = P^* \left( P^{-1} W + A_a^T Y_a \right)
+W^* = P^* \left( P^{-1} W + \tilde{A_a}^T Y_a \right)
 $$
 
 结合公式(27)(22)可得：
 
 $$
-P^* = \left( P^{-1} + A_a^T A_a \right)^{-1}
+P^* = \left( P^{-1} + \tilde{A_a}^T \tilde{A_a} \right)^{-1}
 $$
 
 结合公式(30),公式（29）可表示为：
 
 $$
-W^* = P^* \left[ \left(\left( P^*\right)^{-1} - A_a^T A_a \right) W + A_a^T Y_a \right]
+W^* = P^* \left[ \left(\left( P^*\right)^{-1} - \tilde{A_a}^T \tilde{A_a} \right) W + \tilde{A_a}^T Y_a \right]
 $$
 
 即为：
 
 $$
-W^* = W + P^* A_a^T \left( Y_a - A_a W \right)
+W^* = W + P^* \tilde{A_a}^T \left( Y_a - \tilde{A_a} W \right)
 $$
 
 ## 1.6.简化 $P^*$ 的计算
@@ -313,10 +313,10 @@ $$
 (A + U C V)^{-1} = A^{-1} - A^{-1} U \left( C^{-1} + V A^{-1} U \right)^{-1} V A^{-1}
 $$
 
-令 $A=P^{-1}$, $U=A_a^T$, $V=A_a$.则有：
+令 $A=P^{-1}$, $U=\tilde{A_a}^T$, $V=\tilde{A_a}$.则有：
 
 $$
-P^* = P - P A_a^T \left( I + A_a P A_a^T \right)^{-1} A_a P
+P^* = P - P \tilde{A_a}^T \left( I + \tilde{A_a} P \tilde{A_a}^T \right)^{-1} \tilde{A_a} P
 $$
 
 ### 直接公式：
@@ -326,11 +326,10 @@ P=\left(\tilde{A}^T \tilde{A} + \Lambda\right)^{-1}
 $$
 
 $$
-P^* = P - P A_a^T \left( I + A_a P A_a^T \right)^{-1} A_a P
+P^* = P - P \tilde{A_a}^T \left( I + \tilde{A_a} P \tilde{A_a}^T \right)^{-1} \tilde{A_a} P
 $$
 
 $$
-W^* = W + P^* A_a^T \left( Y_a - A_a W \right)
+W^* = W + P^* \tilde{A_a}^T \left( Y_a - \tilde{A_a} W \right)
 $$
 
-## 

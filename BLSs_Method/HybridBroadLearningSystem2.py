@@ -260,7 +260,7 @@ def compute_weights(
     # 计算权重 W = P (ÃᵀY + B_phy)
     W = P @ (AtY + B_phy)                 # (F, C)
 
-    return W
+    return W, P
 
 
 def build_mixed_system_matrix_test(
@@ -350,6 +350,33 @@ def build_mixed_system_matrix_test(
     A_tilde_test = np.hstack([Z, H, Phi])
     return A_tilde_test
 
+
+def build_mixed_system_matrix_addition(
+    X_addition: np.ndarray,
+    Q_addition: np.ndarray,
+    params: dict,
+    physics_activation: Optional[Callable] = None
+) -> np.ndarray:
+    """
+    用于增量学习场景：使用训练阶段保存的参数构建新增样本的混合系统矩阵。
+    该函数直接复用 build_mixed_system_matrix_test 的实现，仅函数名语义不同。
+    
+    参数:
+        X_addition: 新增样本的数据驱动输入，形状 (M, D)
+        Q_addition: 新增样本的物理驱动输入，形状 (M, B)
+        params: 训练函数返回的参数字典
+        physics_activation: 若训练时使用了自定义物理映射，则需传入相同函数
+    
+    返回:
+        A_tilde_addition: 新增样本的混合系统矩阵，形状 (M, total_features)
+    """
+    return build_mixed_system_matrix_test(
+        X_test=X_addition,
+        Q_test=Q_addition,
+        params=params,
+        physics_activation=physics_activation
+    )
+
 def train(
     X: np.ndarray,                     # 数据驱动输入 (N, D)
     Q: np.ndarray,                     # 物理驱动输入 (N, B)
@@ -402,14 +429,14 @@ def train(
     )
 
     # 2. 计算输出层权重
-    W = compute_weights(
+    W, P = compute_weights(
         A_tilde=A_tilde,
         Y=Y,
         lambda1=lambda1,
         lambda2=lambda2
     )
 
-    return params, W
+    return params, W,  P
 
 
 def test(
@@ -445,4 +472,65 @@ def test(
 
     return Y_pred
 
+def addition_update(
+    W: np.ndarray,                     # 原始权重矩阵 (F, C)
+    P: np.ndarray,                     # 原始矩阵 (F, F) = (ÃᵀÃ + Λ)⁻¹
+    X_addition: np.ndarray,            # 新增数据驱动输入 (M, D)
+    Q_addition: np.ndarray,            # 新增物理驱动输入 (M, B)
+    Y_addition: np.ndarray,            # 新增输出 (M, C)
+    params: dict,                      # 训练阶段保存的参数字典
+    physics_activation: Optional[Callable] = None
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    根据公式进行增量更新：
+        P* = P - P Aaᵀ (I + Aa P Aaᵀ)⁻¹ Aa P
+        W* = W + P* Aaᵀ (Ya - Aa W)
+
+    参数:
+        W: 原始输出权重 (F, C)
+        P: 原始矩阵 (F, F)
+        X_addition, Q_addition: 新增样本输入
+        Y_addition: 新增样本输出
+        params: 训练时返回的参数（用于构建 Aa）
+        physics_activation: 若物理映射为自定义函数，需传入
+
+    返回:
+        P_star: 更新后的矩阵 (F, F)
+        W_star: 更新后的权重 (F, C)
+    """
+    # 构建新增样本的混合系统矩阵 Ã_a
+    Aa = build_mixed_system_matrix_addition(
+        X_addition=X_addition,
+        Q_addition=Q_addition,
+        params=params,
+        physics_activation=physics_activation
+    )   # 形状 (M, F)
+
+    # 计算必要的中间矩阵
+    # Aa @ P 形状 (M, F)
+    AaP = Aa @ P
+    # P @ Aaᵀ 形状 (F, M) = (AaP).T，但后续需要 P Aaᵀ，即 (AaP).T
+    # 公式中需要 P Aaᵀ (I + Aa P Aaᵀ)⁻¹ Aa P
+    # 先计算 AaP 和 P Aaᵀ = (AaP).T
+
+    # 计算 I + Aa P Aaᵀ
+    I = np.eye(Aa.shape[0])   # (M, M)
+    AaPAaT = Aa @ P @ Aa.T     # (M, M)
+    mat_inv = np.linalg.inv(I + AaPAaT)   # (M, M)
+
+    # 计算 P Aaᵀ (I + Aa P Aaᵀ)⁻¹ Aa P
+    # 先求 P Aaᵀ = (AaP).T
+    PAaT = AaP.T               # (F, M)
+    term = PAaT @ mat_inv @ AaP   # (F, F)
+
+    P_star = P - term
+
+    # 更新权重
+    # 计算 Ya - Aa W
+    residual = Y_addition - Aa @ W   # (M, C)
+    # 计算 P_star @ Aaᵀ @ residual
+    # 注意：P_star 是 (F, F)，Aaᵀ 是 (F, M)，residual 是 (M, C)
+    W_star = W + (P_star @ Aa.T @ residual)   # (F, C)
+
+    return P_star, W_star
 # ================== 示例用法 ==================
