@@ -318,3 +318,19 @@ $$
 $$
 P^* = P - P A_a^T \left( I + A_a P A_a^T \right)^{-1} A_a P
 $$
+
+### 直接公式：
+
+$$
+P=\left(\tilde{A}^T \tilde{A} + \Lambda\right)^{-1}
+$$
+
+$$
+P^* = P - P A_a^T \left( I + A_a P A_a^T \right)^{-1} A_a P
+$$
+
+$$
+W^* = W + P^* A_a^T \left( Y_a - A_a W \right)
+$$
+
+## 
