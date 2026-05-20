@@ -83,8 +83,9 @@ $$
 
 ## 1.3.物理特征节点的求解
 
-基础物理扭矩 $\Phi$ 的计算：
+针对物理特征的输入 $Q \in \mathbb{R}^{N \times B}$， $B=3$ 每一个样本都是 $[q ,  \dot{q} ,  \ddot{q}]$
 
+基础物理扭矩 $\Phi$ 的计算：
 $$
 \Phi = M(q)\ddot{q} + C(q,\dot{q})\dot{q} + G(q)
 $$
@@ -104,6 +105,8 @@ G(q) = m \cdot g \cdot d \cdot \cos(q)
 $$
 
 其中m为小腿和脚的总质量， $d$为质心到膝关节的长度， $q$ 为膝关节屈曲角（伸直为0度）
+
+最后得到的 $\Phi\in \mathbb{R}^{N \times 1}$
 
 ## 1.4.系统权重的求解
 
@@ -186,6 +189,49 @@ $$
 $$
 W = P \left(\tilde{A}^T Y + B_{\text{phy}}\right)
 $$
+
+
+
+### 直接公式
+
+$$
+\tilde{A}=[Z \mid H \mid \Phi]=[A \mid \Phi]
+$$
+
+$$
+\hat{Y}=\tilde{A}W=AW_d+\Phi W_p
+$$
+
+ $I_d$ 和 $I_p$ 分别为维度和 $W_d$ 和 $W_p$ 一致的单位矩阵，得广义正则化矩阵 $\Lambda$ :
+
+$$
+\Lambda = \begin{bmatrix}
+\lambda_1 I_d & 0 \\
+0 & \lambda_2 I_p
+\end{bmatrix}
+$$
+
+定义物理偏执向量 $B_{phy}$:
+$$
+B_{\text{phy}} = \begin{bmatrix}
+0 \\
+\lambda_2 I_p
+\end{bmatrix}
+$$
+
+定义 $P$:
+
+$$
+P=\left(\tilde{A}^T \tilde{A} + \Lambda\right)^{-1}
+$$
+
+则 $W$ 的表达式可简化为：
+
+$$
+W = P \left(\tilde{A}^T Y + B_{\text{phy}}\right)
+$$
+
+
 
 ## 1.5.增量学习算法
 
