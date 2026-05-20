@@ -94,98 +94,114 @@ def physics_activation(
     # 返回为列向量 (N, 1)
     return Phi.reshape(-1, 1)
 
-def build_mixed_system_matrix(
-    X: np.ndarray,           # 数据驱动输入，形状 (N, D)
-    Q: np.ndarray,           # 物理驱动输入，形状 (N, B)
-    n: int,                  # 映射特征节点组数
-    mapping_neurons_per_group: int,   # 每组映射节点的输出维度（即 Z_i 的列数）
-    m: int,                  # 增强特征节点组数
-    enhance_neurons_per_group: int,   # 每组增强节点的输出维度（即 H_j 的列数）
-    output_dim: int,         # C，输出维度（用于物理节点）
-    mapping_activation: str = 'linear',   # 映射节点的激活函数类型
-    enhance_activation: str = 'relu',     # 增强节点的激活函数类型
-    physics_activation: Optional[Callable] = None,  # 物理节点映射 g 的函数，若为 None 则使用线性变换
+def build_mixed_system_matrix_train(
+    X: np.ndarray,           # 数据驱动输入 (N, D)
+    Q: np.ndarray,           # 物理驱动输入 (N, B)
+    n: int,                  # 映射节点组数
+    mapping_neurons_per_group: int,   # 每组映射节点神经元数
+    m: int,                  # 增强节点组数
+    enhance_neurons_per_group: int,   # 每组增强节点神经元数
+    output_dim: int,         # 输出维度 C（也用于物理节点 Φ 的列数）
+    mapping_activation: str = 'linear',
+    enhance_activation: str = 'relu',
+    physics_activation: Optional[Callable] = None,
     random_seed: Optional[int] = None
-) -> np.ndarray:
+) -> Tuple[np.ndarray, dict]:
     """
-    根据公式 (3)-(8) 构建混合系统矩阵 Ã = [Z | H | Φ]。
-    
-    参数:
-        X: 数据驱动输入，形状 (N, D)
-        Q: 物理驱动输入，形状 (N, B)
-        n: 映射特征节点组数
-        mapping_neurons_per_group: 每组映射特征节点的神经元数（即每个 Z_i 的列数）
-        m: 增强特征节点组数
-        enhance_neurons_per_group: 每组增强特征节点的神经元数（即每个 H_j 的列数）
-        output_dim: 输出维度 C，用于物理节点 Φ 的输出维度，也决定了最终 W 的列数
-        mapping_activation: 映射节点 φ_i 的激活函数类型，可选 'linear', 'relu', 'tanh', 'sigmoid'
-        enhance_activation: 增强节点 ξ_j 的激活函数类型
-        physics_activation: 物理节点 g 的映射函数，若为 None 则使用线性变换: Φ = Q @ W_phy + b_phy
-        random_seed: 随机种子，确保可重复性
+    训练阶段构建混合系统矩阵并保存随机参数。
     
     返回:
-        Ã: 混合系统矩阵，形状 (N, total_features)
-            total_features = n * mapping_neurons_per_group + m * enhance_neurons_per_group + output_dim
+        A_tilde: 混合系统矩阵 (N, total_features)
+        params: 字典，包含以下键:
+            - 'mapping_weights': list of W_mi (每个形状 (D, mapping_neurons_per_group))
+            - 'mapping_biases': list of beta_mi (每个形状 (1, mapping_neurons_per_group))
+            - 'enhance_weights': list of W_ej (每个形状 (F, enhance_neurons_per_group))
+            - 'enhance_biases': list of beta_ej (每个形状 (1, enhance_neurons_per_group))
+            - 'phy_W': 物理线性映射权重 (B, output_dim) 或 None (若使用自定义函数)
+            - 'phy_b': 物理线性映射偏置 (1, output_dim) 或 None
+            - 'phy_activation_func': physics_activation (若为自定义函数，测试时需传入相同函数)
+            - 'n', 'mapping_neurons_per_group', 'm', 'enhance_neurons_per_group', 'output_dim'
+            - 'mapping_activation', 'enhance_activation'  (用于测试时选择激活函数)
     """
     if random_seed is not None:
         np.random.seed(random_seed)
     
     N, D = X.shape
     N_q, B = Q.shape
-    assert N == N_q, "X 和 Q 的样本数必须相同"
-    assert output_dim > 0, "输出维度必须为正"
+    assert N == N_q
+    assert output_dim > 0
     
-    # 选择激活函数
-    phi_activation = ACTIVATIONS.get(mapping_activation, default_activation)
-    xi_activation = ACTIVATIONS.get(enhance_activation, default_activation)
+    # 激活函数
+    phi_act = ACTIVATIONS.get(mapping_activation, default_activation)
+    xi_act = ACTIVATIONS.get(enhance_activation, default_activation)
     
-    # ================== 1. 构建映射特征节点 Z = [Z_1, Z_2, ..., Z_n] ==================
+    # ---------- 1. 映射特征节点 Z ----------
+    mapping_weights = []
+    mapping_biases = []
     Z_list = []
-    for i in range(1, n+1):
-        # 生成随机正交权重 W_{m_i}，形状 (D, mapping_neurons_per_group)
+    for _ in range(n):
         W_mi = generate_orthogonal_weights(D, mapping_neurons_per_group)
-        # 生成随机偏置 β_{m_i}，形状 (1, mapping_neurons_per_group)
         beta_mi = generate_random_bias(mapping_neurons_per_group)
-        # 线性变换: X @ W_mi + beta_mi，然后应用 φ_i
         linear_out = X @ W_mi + beta_mi
-        Z_i = phi_activation(linear_out)   # 形状 (N, mapping_neurons_per_group)
+        Z_i = phi_act(linear_out)
         Z_list.append(Z_i)
-    # 横向拼接所有 Z_i
-    Z = np.hstack(Z_list)   # 形状 (N, n * mapping_neurons_per_group)
+        mapping_weights.append(W_mi)
+        mapping_biases.append(beta_mi)
+    Z = np.hstack(Z_list)   # (N, n * mapping_neurons_per_group)
     
-    # ================== 2. 构建增强特征节点 H = [H_1, H_2, ..., H_m] ==================
-    # 输入 Z 的形状 (N, F)，其中 F = n * mapping_neurons_per_group
+    # ---------- 2. 增强特征节点 H ----------
     F = Z.shape[1]
+    enhance_weights = []
+    enhance_biases = []
     H_list = []
-    for j in range(1, m+1):
-        # 生成随机正交权重 W_{e_j}，形状 (F, enhance_neurons_per_group)
-        # 注意：原公式 (5) 中写为 Z^T W_ej，但根据常见宽度学习应为 Z W_ej，此处采用合理实现
+    for _ in range(m):
         W_ej = generate_orthogonal_weights(F, enhance_neurons_per_group)
-        # 生成随机偏置 β_{e_j}，形状 (1, enhance_neurons_per_group)
         beta_ej = generate_random_bias(enhance_neurons_per_group)
-        # 线性变换: Z @ W_ej + beta_ej，然后应用 ξ_j
         linear_out = Z @ W_ej + beta_ej
-        H_j = xi_activation(linear_out)   # 形状 (N, enhance_neurons_per_group)
+        H_j = xi_act(linear_out)
         H_list.append(H_j)
-    H = np.hstack(H_list)   # 形状 (N, m * enhance_neurons_per_group)
+        enhance_weights.append(W_ej)
+        enhance_biases.append(beta_ej)
+    H = np.hstack(H_list)   # (N, m * enhance_neurons_per_group)
     
-    # ================== 3. 构建物理特征节点 Φ = g(Q) ==================
-    # 要求 Φ 的形状为 (N, output_dim) 即 (N, C)
+    # ---------- 3. 物理特征节点 Φ ----------
     if physics_activation is None:
-        # 使用线性变换: Φ = Q @ W_phy + b_phy
-        W_phy = np.random.randn(B, output_dim)   # 线性权重，不严格要求正交
-        b_phy = np.random.randn(1, output_dim)
-        Phi = Q @ W_phy + b_phy
+        # 线性映射
+        phy_W = np.random.randn(B, output_dim)
+        phy_b = np.random.randn(1, output_dim)
+        Phi = Q @ phy_W + phy_b
+        phy_activation_func = None
     else:
-        # 用户自定义映射，必须确保输出形状为 (N, output_dim)
+        # 自定义映射
         Phi = physics_activation(Q)
         if Phi.shape != (N, output_dim):
-            raise ValueError(f"physics_activation 必须返回形状 ({N}, {output_dim}) 的张量，实际得到 {Phi.shape}")
+            raise ValueError(f"physics_activation 必须返回 ({N}, {output_dim}) 形状")
+        phy_W = None
+        phy_b = None
+        phy_activation_func = physics_activation   # 保存函数引用（测试时需传入）
     
-    # ================== 4. 拼接得到混合系统矩阵 Ã = [Z | H | Φ] ==================
-    A_tilde = np.hstack([Z, H, Phi])   # 形状 (N, total_features)
+    # ---------- 4. 拼接 ----------
+    A_tilde = np.hstack([Z, H, Phi])
     
-    return A_tilde
+    # 保存参数
+    params = {
+        'mapping_weights': mapping_weights,
+        'mapping_biases': mapping_biases,
+        'enhance_weights': enhance_weights,
+        'enhance_biases': enhance_biases,
+        'phy_W': phy_W,
+        'phy_b': phy_b,
+        'phy_activation_func': phy_activation_func,
+        'n': n,
+        'mapping_neurons_per_group': mapping_neurons_per_group,
+        'm': m,
+        'enhance_neurons_per_group': enhance_neurons_per_group,
+        'output_dim': output_dim,
+        'mapping_activation': mapping_activation,
+        'enhance_activation': enhance_activation
+    }
+    
+    return A_tilde, params
 
 def compute_weights(
     A_tilde: np.ndarray,   # 混合系统矩阵，形状 (N, F)，其中 F = d + p, p = C
@@ -247,31 +263,186 @@ def compute_weights(
     return W
 
 
-# ================== 示例用法 ==================
-if __name__ == "__main__":
-    # 生成模拟数据
-    np.random.seed(42)
-    N, D, B, C = 100, 10, 5, 3
-    X = np.random.randn(N, D)
-    Q = np.random.randn(N, B)
+def build_mixed_system_matrix_test(
+    X_test: np.ndarray,
+    Q_test: np.ndarray,
+    params: dict,
+    physics_activation: Optional[Callable] = None
+) -> np.ndarray:
+    """
+    使用训练阶段保存的参数构建测试集的混合系统矩阵。
     
-    # 参数设置
-    n = 3                     # 3 组映射节点
-    mapping_neurons = 8       # 每组 8 个神经元
-    m = 2                     # 2 组增强节点
-    enhance_neurons = 10      # 每组 10 个神经元
-    output_dim = C
+    参数:
+        X_test: (N_test, D)
+        Q_test: (N_test, B)
+        params: 训练函数返回的参数字典
+        physics_activation: 若训练时使用了自定义映射函数，则测试时必须传入相同的函数；
+                            若训练时使用了线性映射，则该参数被忽略。
     
-    # 构建混合系统矩阵
-    A_tilde = build_mixed_system_matrix(
-        X, Q, n, mapping_neurons, m, enhance_neurons, output_dim,
-        mapping_activation='linear',
-        enhance_activation='relu',
-        physics_activation=None,
-        random_seed=42
+    返回:
+        A_tilde_test: (N_test, total_features)
+    """
+    # 读取参数
+    mapping_weights = params['mapping_weights']
+    mapping_biases = params['mapping_biases']
+    enhance_weights = params['enhance_weights']
+    enhance_biases = params['enhance_biases']
+    phy_W = params['phy_W']
+    phy_b = params['phy_b']
+    n = params['n']
+    mapping_neurons_per_group = params['mapping_neurons_per_group']
+    m = params['m']
+    enhance_neurons_per_group = params['enhance_neurons_per_group']
+    output_dim = params['output_dim']
+    mapping_act_name = params['mapping_activation']
+    enhance_act_name = params['enhance_activation']
+    saved_phy_func = params.get('phy_activation_func')  # 训练时保存的函数（可能为None）
+    
+    # 激活函数
+    phi_act = ACTIVATIONS.get(mapping_act_name, default_activation)
+    xi_act = ACTIVATIONS.get(enhance_act_name, default_activation)
+    
+    N_test, D = X_test.shape
+    N_q, B = Q_test.shape
+    assert N_test == N_q
+    
+    # ---------- 1. 映射特征节点 ----------
+    Z_list = []
+    for i in range(n):
+        W_mi = mapping_weights[i]
+        beta_mi = mapping_biases[i]
+        linear_out = X_test @ W_mi + beta_mi
+        Z_i = phi_act(linear_out)
+        Z_list.append(Z_i)
+    Z = np.hstack(Z_list)
+    
+    # ---------- 2. 增强特征节点 ----------
+    F = Z.shape[1]
+    H_list = []
+    for j in range(m):
+        W_ej = enhance_weights[j]
+        beta_ej = enhance_biases[j]
+        # 注意：增强节点输入是训练时的 Z，测试时需用当前的 Z 计算
+        # 但 W_ej 的形状是 (F_train, enhance_neurons)，
+        # 测试时 F_test 必须等于训练时的 F（即 n * mapping_neurons_per_group）
+        # 若 X_test 维度 D 与训练一致，则 F 相同，断言确保
+        assert Z.shape[1] == F, "测试集映射特征维度与训练时不一致"
+        linear_out = Z @ W_ej + beta_ej
+        H_j = xi_act(linear_out)
+        H_list.append(H_j)
+    H = np.hstack(H_list)
+    
+    # ---------- 3. 物理特征节点 ----------
+    # 决策：优先使用传入的 physics_activation，若为 None 则尝试使用训练时保存的函数或线性映射
+    if physics_activation is not None:
+        Phi = physics_activation(Q_test)
+    elif saved_phy_func is not None:
+        Phi = saved_phy_func(Q_test)
+    elif phy_W is not None and phy_b is not None:
+        Phi = Q_test @ phy_W + phy_b
+    else:
+        raise ValueError("无法确定物理映射：请提供 physics_activation 或确保训练时使用了线性映射")
+    
+    if Phi.shape != (N_test, output_dim):
+        raise ValueError(f"物理映射输出形状错误，应为 ({N_test}, {output_dim})，实际 {Phi.shape}")
+    
+    # ---------- 4. 拼接 ----------
+    A_tilde_test = np.hstack([Z, H, Phi])
+    return A_tilde_test
+
+def train(
+    X: np.ndarray,                     # 数据驱动输入 (N, D)
+    Q: np.ndarray,                     # 物理驱动输入 (N, B)
+    Y: np.ndarray,                     # 目标输出 (N, C)
+    n: int,                            # 映射特征节点组数
+    mapping_neurons_per_group: int,    # 每组映射节点的神经元数
+    m: int,                            # 增强特征节点组数
+    enhance_neurons_per_group: int,    # 每组增强节点的神经元数
+    output_dim: Optional[int] = None,  # 输出维度 C，若为 None 则自动从 Y 获取
+    mapping_activation: str = 'linear',
+    enhance_activation: str = 'relu',
+    physics_activation: Optional[Callable] = None,
+    lambda1: float = 1e-3,             # 数据部分正则化系数
+    lambda2: float = 1e-3,             # 物理部分正则化系数
+    random_seed: Optional[int] = None
+) -> Tuple[dict, np.ndarray]:
+    """
+    训练混合宽度学习模型。
+
+    参数:
+        X, Q, Y: 训练数据
+        n, mapping_neurons_per_group: 映射节点配置
+        m, enhance_neurons_per_group: 增强节点配置
+        output_dim: 输出维度（默认从 Y.shape[1] 获得）
+        mapping_activation, enhance_activation: 激活函数类型
+        physics_activation: 物理节点映射函数（若为 None 则使用线性变换）
+        lambda1, lambda2: 正则化参数
+        random_seed: 随机种子
+
+    返回:
+        params: 训练时生成的随机参数（可用于测试阶段）
+        W: 输出层权重矩阵，形状 (total_features, C)
+    """
+    if output_dim is None:
+        output_dim = Y.shape[1]   # C
+
+    # 1. 构建混合系统矩阵并保存随机参数
+    A_tilde, params = build_mixed_system_matrix_train(
+        X=X,
+        Q=Q,
+        n=n,
+        mapping_neurons_per_group=mapping_neurons_per_group,
+        m=m,
+        enhance_neurons_per_group=enhance_neurons_per_group,
+        output_dim=output_dim,
+        mapping_activation=mapping_activation,
+        enhance_activation=enhance_activation,
+        physics_activation=physics_activation,
+        random_seed=random_seed
     )
-    
-    print(f"混合系统矩阵 Ã 的形状: {A_tilde.shape}")
-    expected_features = n * mapping_neurons + m * enhance_neurons + output_dim
-    print(f"期望的特征维度: {expected_features}")
-    print(f"Ã 的前几行:\n{A_tilde[:3, :10]}")  # 打印部分内容
+
+    # 2. 计算输出层权重
+    W = compute_weights(
+        A_tilde=A_tilde,
+        Y=Y,
+        lambda1=lambda1,
+        lambda2=lambda2
+    )
+
+    return params, W
+
+
+def test(
+    X_test: np.ndarray,
+    Q_test: np.ndarray,
+    params: dict,
+    W: np.ndarray,
+    physics_activation: Optional[Callable] = None
+) -> np.ndarray:
+    """
+    使用训练好的模型对测试集进行预测。
+
+    参数:
+        X_test: 测试集数据驱动输入，形状 (N_test, D)
+        Q_test: 测试集物理驱动输入，形状 (N_test, B)
+        params: 训练阶段保存的参数字典（由 train 函数返回）
+        W: 训练得到的输出层权重矩阵，形状 (total_features, C)
+        physics_activation: 若训练时使用了自定义物理映射，测试时需传入相同函数
+
+    返回:
+        Y_pred: 预测输出，形状 (N_test, C)
+    """
+    # 构建测试集的混合系统矩阵
+    A_tilde_test = build_mixed_system_matrix_test(
+        X_test=X_test,
+        Q_test=Q_test,
+        params=params,
+        physics_activation=physics_activation
+    )
+
+    # 预测：Ŷ = Ã * W
+    Y_pred = A_tilde_test @ W
+
+    return Y_pred
+
+# ================== 示例用法 ==================
