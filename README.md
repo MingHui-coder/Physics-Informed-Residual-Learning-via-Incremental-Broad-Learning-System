@@ -86,6 +86,7 @@ $$
 针对物理特征的输入 $Q \in \mathbb{R}^{N \times B}$， $B=3$ 每一个样本都是 $[q ,  \dot{q} ,  \ddot{q}]$
 
 基础物理扭矩 $\Phi$ 的计算：
+
 $$
 \Phi = M(q)\ddot{q} + C(q,\dot{q})\dot{q} + G(q)
 $$
